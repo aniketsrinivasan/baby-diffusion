@@ -1,10 +1,13 @@
 import torch
 from torch import nn
-from torch.nn import functional as F
 from attention import SelfAttention
 
 
 class VAE_AttentionBlock(nn.Module):
+    """
+    The Attention Block utilized in the Variational Autoencoder. Used to create relationships between
+    pixels of an image that are arbitrarily far using self-attention.
+    """
     def __init__(self, channels: int):
         super().__init__()
         # Ensuring that the distribution stays somewhat the same (for stability):
@@ -16,4 +19,31 @@ class VAE_AttentionBlock(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x:    (batch_size, channels, height, width) where (height, width) are not fixed.
-        pass
+        # Residue for residual connection:
+        residue = x
+
+        # Extracting shape of the input:
+        batch_size, channels, height, width = x.shape
+
+        # We perform Self-Attention between all the pixels of the image:
+        #   "flattening" the dimensions of the image
+        #   (batch_size, channels, height, width) ==> (batch_size, channels, height*width)
+        x = x.view(batch_size, channels, height*width)
+        #   (batch_size, channels, height*width) ==> (batch_size, height*width, channels)
+        #       each pixel is in dim=1 (height*width) and has an 'embedding' given by dim=2 (channels).
+        #       this is the same idea as used in the Transformer model.
+        x = x.transpose(dim0=2, dim1=1)
+
+        # Self-Attention:
+        x = self.attention(x)       # does not change shape of Tensor
+
+        # Transposing back:
+        #   (batch_size, height*width, channels) ==> (batch_size, channels, height*width)
+        x = x.transpose(dim0=2, dim1=1)
+        # Reforming the Tensor into original shape:
+        x = x.view((batch_size, channels, height, width))
+
+        # Residual connection:
+        x += residue
+
+        return x
