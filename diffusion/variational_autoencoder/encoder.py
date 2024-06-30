@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from decoder import VAE_AttentionBlock, VAE_ResidualBlock
+from blocks import VAE_AttentionBlock, VAE_ResidualBlock
 
 
 class VAE_Encoder(nn.Sequential):
@@ -13,7 +13,8 @@ class VAE_Encoder(nn.Sequential):
         #   increases the dimension of each feature. This means each pixel represents more information,
         #   but we have less pixels in total.
         super().__init__(
-            # Convolutional layer:  (batch_size, channels, height, width) => (batch_size, 128, height, width)
+            # Convolutional layer:
+            #   (batch_size, channels, height, width) => (batch_size, 128, height, width)
             nn.Conv2d(in_channels=3, out_channels=128, kernel_size=3, padding=1),
 
             # Residual block:
@@ -21,7 +22,8 @@ class VAE_Encoder(nn.Sequential):
             #   (batch_size, 128, height, width) => (batch_size, 128, height, width)
             VAE_ResidualBlock(128, 128),
 
-            # Convolutional layer:  (batch_size, 128, height, width) => (batch_size, 128, height//2, width//2)
+            # Convolutional layer:
+            #   (batch_size, 128, height, width) => (batch_size, 128, height//2, width//2)
             #   here, we want (ideally) that our image has odd height and width (to avoid border ignorance)
             #   however, we fix this issue in the self.forward() method using manual padding otherwise
             nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, stride=2, padding=0),
@@ -90,15 +92,12 @@ class VAE_Encoder(nn.Sequential):
     def forward(self, x: torch.Tensor, noise: torch.Tensor) -> torch.Tensor:
         """
         Forward-pass through the Variational Autoencoder. Being a Variational Autoencoder, it learns how to
-        represent images in a latent space, which is a multivariate Gaussian (and the autoencoder learns the
-        mean and variance of this distribution). The output of the encoder is the mean and log(variance) of
-        the latent space distribution.
-
-        We can then sample from this distribution.
+        represent images in a latent space, which is modeled by a multi-variate Gaussian distribution (this
+        is the functional form learnt by the neural network).
 
         :param x:       input image (as a torch.Tensor).
         :param noise:   noise (added to the output, so shape must match ouput).
-        :return:        torch.Tensor (mean, variance) of the latent space.
+        :return:        torch.Tensor (mean, variance) of the encoded input.
         """
         # x:        (batch_size, channels, height, width)
         # noise:    (batch_size, out_channels, height//8, width//8)    (same size as output of encoder)
@@ -107,7 +106,7 @@ class VAE_Encoder(nn.Sequential):
             # If the stride attribute is (2, 2) and padding isn't applied, we will manually apply a
             #   symmetrical padding:
             if getattr(module, "stride", None) == (2, 2):
-                x = F.pad(x, (0, 1, 0, 1))  # add padding to bottom and right of image (avoids border ignorance)
+                x = F.pad(x, (0, 1, 0, 1))  # add padding to bottom and right (avoids border ignorance)
             # Passing through Sequential:
             x = module(x)
 
@@ -132,3 +131,5 @@ class VAE_Encoder(nn.Sequential):
 
         # We must scale the output by a constant (this is chosen from the original repository):
         x *= 0.18215
+
+        return x
