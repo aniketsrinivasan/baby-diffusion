@@ -1,0 +1,3 @@
+from attention_block import VAE_AttentionBlock
+from residual_block import VAE_ResidualBlock
+from attention import SelfAttention
