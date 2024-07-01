@@ -9,6 +9,14 @@ class SelfAttention(nn.Module):
     __dropout = 0.2              # dropout for Attention method
 
     def __init__(self, n_heads: int, d_embed: int, projection_bias=True, ejection_bias=True):
+        """
+        Performs multi-headed self-Attention on a given Tensor of shape (batch_size, seq_len, d_embed).
+
+        :param n_heads:             number of heads for multi-headed Attention.
+        :param d_embed:             dimension of the embedding space.
+        :param projection_bias:     whether to include bias in the projection layer.
+        :param ejection_bias:       whether to include bias in the ejection layer.
+        """
         super().__init__()
 
         # Linear layers:
@@ -28,6 +36,13 @@ class SelfAttention(nn.Module):
 
     # Forward pass:
     def forward(self, x: torch.Tensor, causal_mask=False) -> torch.Tensor:
+        """
+        Forward method for multi-headed self-Attention on a given Tensor.
+
+        :param x:               torch.Tensor of shape (batch_size, seq_len, d_embed).
+        :param causal_mask:     whether to perform autoregressive masking.
+        :return:                torch.Tensor of input shape.
+        """
         # Storing the input shape of our Tensor:
         input_shape = x.shape
         # Extracting element-wise:
@@ -77,6 +92,7 @@ class SelfAttention(nn.Module):
         output = output.reshape(input_shape)
 
         # Passing through the output weights matrix (ejection):
+        #   (batch_size, seq_len, d_embed) ==> (batch_size, seq_len, d_embed)
         output = self.ejection(output)
 
         return output

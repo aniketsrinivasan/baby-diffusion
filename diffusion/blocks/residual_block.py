@@ -5,6 +5,15 @@ from torch.nn import functional as F
 
 class VAE_ResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):
+        """
+        A block that applies convolutions, normalizations and residual connections to a given image.
+        May be used to change the number of channels in the image for downsampling/upsampling.
+
+        Input is a torch.Tensor of shape (batch_size, in_channels, height, width).
+
+        :param in_channels:     number of channels in input image.
+        :param out_channels:    number of channels for output (may differ from input).
+        """
         super().__init__()
         # We use two normalizations and convolutions. Notice that normalizations don't change
         # the shape of the tensor.
@@ -31,6 +40,12 @@ class VAE_ResidualBlock(nn.Module):
 
     # Forward method:
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Applies ResidualBlock methods to an image (torch.Tensor).
+
+        :param x:   image (torch.Tensor) of shape (batch_size, in_channels, height, width).
+        :return:    output (torch.Tensor) of shape (batch_size, out_channels, height, width).
+        """
         # x:    (batch_size, in_channels, height, width)
         # Save input to pass through residual connection later:
         residue = x
