@@ -69,7 +69,7 @@ class SelfAttention(nn.Module):
         # Calculating weight matrix:
         #   (batch_size, n_heads, seq_len, seq_len)
         #   this is essentially (QK^t)/sqrt(d_k) in the paper.
-        weights = query @ key.transpose(-1, -2) / math.sqrt(d_embed)
+        weights = query @ key.transpose(-1, -2) / math.sqrt(self.d_head)
 
         # Applying the causal mask (applied for SoftMax, applying '-inf'):
         if causal_mask:
@@ -96,4 +96,3 @@ class SelfAttention(nn.Module):
         output = self.ejection(output)
 
         return output
-
