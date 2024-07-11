@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from blocks import VAE_AttentionBlock, VAE_ResidualBlock
+from ..blocks import VAE_AttentionBlock, VAE_ResidualBlock
 
 
 class VAE_Encoder(nn.Sequential):
@@ -95,9 +95,11 @@ class VAE_Encoder(nn.Sequential):
         represent images in a latent space, which is modeled by a multi-variate Gaussian distribution (this
         is the functional form learnt by the neural network).
 
+        Shape of output: (batch_size, 8, height//8, width//8)
+
         :param x:       input image (as a torch.Tensor).
-        :param noise:   noise (added to the output, so shape must match ouput).
-        :return:        torch.Tensor (mean, variance) of the encoded input.
+        :param noise:   noise (added to the output, so shape must match output).
+        :return:        encoded image (as a torch.Tensor).
         """
         # x:        (batch_size, channels, height, width)
         # noise:    (batch_size, out_channels, height//8, width//8)    (same size as output of encoder)

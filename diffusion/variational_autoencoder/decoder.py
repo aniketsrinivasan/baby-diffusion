@@ -1,55 +1,90 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
-from blocks import SelfAttention
+from ..blocks import VAE_ResidualBlock, VAE_AttentionBlock
 
 
-class VAE_ResidualBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        # We use two normalizations and convolutions. Notice that normalizations don't change
-        # the shape of the tensor.
-        #   First normalization and convolution:
-        self.groupnorm_1 = nn.GroupNorm(num_groups=32, num_channels=in_channels)
-        self.conv_1 = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                kernel_size=3, padding=1)
-        #   Second normalization and convolution:
-        self.groupnorm_2 = nn.GroupNorm(num_groups=32, num_channels=out_channels)
-        self.conv_2 = nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
-                                kernel_size=3, padding=1)
+class VAE_Decoder(nn.Sequential):
+    def __init__(self):
+        # Creating parent Sequential model to reverse Encoder process:
+        #   shape of encoded image:     (batch_size, 8, height//8, width//8)
+        super().__init__(
+            # (batch_size, 8, height//8, width//8) ==> (batch_size, 8, height//8, width//8)
+            nn.Conv2d(in_channels=8, out_channels=8, kernel_size=1, padding=0),
 
-        # Defining the SiLU function:
-        self.SiLU = F.silu
+            # (batch_size, 8, height//8, width//8) ==> (batch_size, 512, height//8, width//8)
+            nn.Conv2d(in_channels=8, out_channels=512, kernel_size=3, padding=1),
 
-        # We add a skip (residual) connection:
-        #   initializing a residual layer to ensure that the skip-connection residue has the same
-        #   shape as the output of the forward method
-        if in_channels == out_channels:
-            self.residual_layer = nn.Identity()
-        else:
-            self.residual_layer = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                            kernel_size=1, padding=0)
+            # (batch_size, 512, height//8, width//8) ==> (batch_size, 512, height//8, width//8)
+            VAE_ResidualBlock(in_channels=512, out_channels=512),
+
+            # (batch_size, 512, height//8, width//8) ==> (batch_size, 512, height//8, width//8)
+            VAE_AttentionBlock(channels=512),
+
+            # (batch_size, 512, height//8, width//8) ==> (batch_size, 512, height//8, width//8)
+            VAE_ResidualBlock(in_channels=512, out_channels=512),
+            VAE_ResidualBlock(in_channels=512, out_channels=512),
+            VAE_ResidualBlock(in_channels=512, out_channels=512),
+
+            # Now we increase the size of the image:
+            #   (batch_size, 512, height//8, width//8) ==> (batch_size, 512, height//4, width//4)
+            nn.Upsample(scale_factor=2),
+
+            #   (batch_size, 512, height//4, width//4) ==> (batch_size, 512, height//4, width//4)
+            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, padding=1),
+
+            #   (batch_size, 512, height//4, width//4) ==> (batch_size, 512, height//4, width//4)
+            VAE_ResidualBlock(in_channels=512, out_channels=512),
+            VAE_ResidualBlock(in_channels=512, out_channels=512),
+            VAE_ResidualBlock(in_channels=512, out_channels=512),
+
+            # Increasing image size again:
+            #   (batch_size, 512, height//4, width//4) ==> (batch_size, 512, height//2, width//2)
+            nn.Upsample(scale_factor=2),
+
+            #   (batch_size, 512, height//2, width//2) ==> (batch_size, 512, height//2, width//2)
+            nn.Conv2d(in_channels=512, out_channels=512, kernel_size=3, padding=1),
+
+            #   (batch_size, 512, height//2, width//2) ==> (batch_size, 256, height//2, width//2)
+            VAE_ResidualBlock(in_channels=512, out_channels=256),
+            VAE_ResidualBlock(in_channels=256, out_channels=256),
+            VAE_ResidualBlock(in_channels=256, out_channels=256),
+
+            # Increasing image size again:
+            #   (batch_size, 256, height//2, width//2) ==> (batch_size, 256, height, width)
+            nn.Upsample(scale_factor=2),
+
+            #   (batch_size, 256, height, width) ==> (batch_size, 256, height, width)
+            nn.Conv2d(in_channels=256, out_channels=256, kernel_size=3, padding=1),
+
+            #   (batch_size, 256, height, width) ==> (batch_size, 128, height, width)
+            VAE_ResidualBlock(in_channels=256, out_channels=128),
+            VAE_ResidualBlock(in_channels=128, out_channels=128),
+            VAE_ResidualBlock(in_channels=128, out_channels=128),
+
+            # Group normalization (we group features in groups of 32):
+            #   (batch_size, 128, height, width) ==> (batch_size, 128, height, width)
+            nn.GroupNorm(num_groups=32, num_channels=128),
+
+            # Applying SiLU activation (chosen because works best, according to paper):
+            nn.SiLU(),
+
+            # Final convolution, changing to 3-channels (RGB):
+            #   (batch_size, 128, height, width) ==> (batch_size, 3, height, width)
+            nn.Conv2d(in_channels=128, out_channels=3, kernel_size=3, padding=1)
+        )
 
     # Forward method:
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # x:    (batch_size, in_channels, height, width)
-        # Save input to pass through residual connection later:
-        residue = x
+        # x:    (batch_size, 8, height//8, width//8)
+        # We want to undo everything done in the encoder, and pass through Sequential.
 
-        # Pass input through first normalization, activation and convolution:
-        x = self.groupnorm_1(x)
-        x = self.SiLU(x)
-        x = self.conv_1(x)
+        # Nullifying scaling applied at end of encoding:
+        x /= 0.18215
 
-        # Pass result through second normalization, activation and convolution:
-        x = self.groupnorm_2(x)
-        x = self.SiLU(x)
-        x = self.conv_2(x)
+        # Passing through decoder:
+        for module in self:
+            x = module(x)
 
-        # Apply the residual connection:
-        #   notice that we initialized self.residual_layer() in such a way that it guarantees
-        #   that the shape of the output and 'residual_layer(residue)' are equal for the addition.
-        x += self.residual_layer(residue)
-
+        # x:    (batch_size, 3, height, width)
         return x
-
